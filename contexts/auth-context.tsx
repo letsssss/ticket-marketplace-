@@ -15,6 +15,7 @@ type AuthContextType = {
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>
   logout: () => Promise<void>
+  updateProfile: (userData: Partial<User>) => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -114,9 +115,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       toast.success("로그아웃되었습니다.")
     }
   }
+  
+  // 프로필 업데이트 함수
+  const updateProfile = async (userData: Partial<User>) => {
+    if (!user) {
+      toast.error("로그인이 필요합니다")
+      return false
+    }
+    
+    try {
+      setIsLoading(true)
+      
+      // 사용자 정보 업데이트 API 호출
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: user.id, ...userData }),
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        toast.error(errorData.error || "프로필 업데이트에 실패했습니다")
+        return false
+      }
+      
+      const updatedUserData = await response.json()
+      
+      // 로컬 스토리지와 상태 업데이트
+      const updatedUser = { ...user, ...updatedUserData }
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+      setUser(updatedUser)
+      
+      toast.success("프로필이 업데이트되었습니다")
+      return true
+    } catch (error) {
+      console.error("프로필 업데이트 오류:", error)
+      toast.error("프로필 업데이트 중 오류가 발생했습니다")
+      return false
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthenticated, login, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )

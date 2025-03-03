@@ -17,6 +17,7 @@ export default function Signup() {
   const router = useRouter()
   const [agreed, setAgreed] = useState(false)
   const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -48,58 +49,61 @@ export default function Signup() {
   // 이메일 중복 검사
   useEffect(() => {
     // 디바운스를 위한 타이머
-    const timer = setTimeout(async () => {
-      // 이메일이 비어있거나 형식이 올바르지 않으면 검사하지 않음
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!email || !emailRegex.test(email)) {
-        setEmailError("")
-        return
-      }
+    let timer: NodeJS.Timeout
+    
+    const checkEmailExists = async () => {
+      if (!email || !email.includes('@')) return
       
       try {
         setIsCheckingEmail(true)
+        setEmailError("")
+        
         const response = await fetch(`/api/users?email=${encodeURIComponent(email)}`)
         const data = await response.json()
         
         if (data.exists) {
           setEmailError("이미 사용 중인 이메일 주소입니다.")
-        } else {
-          setEmailError("")
         }
       } catch (error) {
-        console.error("이메일 중복 검사 오류:", error)
+        console.error("이메일 확인 오류:", error)
       } finally {
         setIsCheckingEmail(false)
       }
-    }, 500) // 500ms 디바운스
+    }
+    
+    if (email) {
+      // 타이핑이 멈추고 500ms 후에 API 호출
+      timer = setTimeout(checkEmailExists, 500)
+    }
     
     return () => clearTimeout(timer)
   }, [email])
   
-  // 모든 비밀번호 조건이 충족되었는지 확인
+  // 모든 유효성 검사 통과 여부
   const isPasswordValid = Object.values(passwordValidation).every(Boolean)
+  const isFormValid = email && password && confirmPassword && agreed && isPasswordValid && !emailError
   
-  // 폼 전체가 유효한지 확인
-  const isFormValid = isPasswordValid && !emailError && email && agreed
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setError("")
-    setFormTouched(true)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     
-    // 이메일 중복 검사 중이면 제출 방지
-    if (isCheckingEmail) {
-      setError("이메일 중복 검사 중입니다. 잠시 후 다시 시도해주세요.")
+    if (!isFormValid) {
+      setFormTouched(true)
+      
+      if (!agreed) {
+        setError("이용약관에 동의해주세요.")
+        return
+      }
+      
+      if (emailError) {
+        setError(emailError)
+        return
+      }
+      
+      setError("모든 필드를 올바르게 입력해주세요.")
       return
     }
     
-    // 이메일 오류가 있으면 제출 방지
-    if (emailError) {
-      setError(emailError)
-      return
-    }
-    
-    console.log("회원가입 시도:", { email, password })
+    console.log("회원가입 시도:", { email, username, password })
     
     // 이메일 유효성 검사
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -127,7 +131,7 @@ export default function Signup() {
         body: JSON.stringify({
           email,
           password,
-          username: email.split("@")[0], // 임시로 이메일에서 사용자 이름 생성
+          username: username || email.split("@")[0], // 사용자 이름이 없으면 이메일에서 생성
         }),
       })
       
@@ -148,187 +152,187 @@ export default function Signup() {
       
       // 성공 시 처리
       toast.success("회원가입이 완료되었습니다!")
-      router.push("/login") // 로그인 페이지로 이동
-    } catch (err) {
-      console.error("회원가입 오류:", err)
-      setError(err instanceof Error ? err.message : "회원가입에 실패했습니다.")
+      
+      // 로그인 페이지로 이동
+      router.push("/login")
+    } catch (error) {
+      console.error("회원가입 오류:", error)
+      setError(error instanceof Error ? error.message : "회원가입 중 오류가 발생했습니다.")
     } finally {
       setIsLoading(false)
     }
   }
-
+  
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-gray-50">
-      <div className="w-full max-w-md space-y-8">
-        {/* Logo */}
-        <div className="flex justify-center">
-          <Link href="/">
-            <Image src="/placeholder.svg" alt="TICKETBAY" width={120} height={40} className="h-12 object-contain" />
-          </Link>
-        </div>
-
-        {/* Back Button */}
-        <div>
-          <Link href="/login" className="flex items-center text-sm text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            로그인으로 돌아가기
-          </Link>
-        </div>
-
-        {/* Signup Form */}
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          {error && <div className="p-3 bg-red-50 text-red-500 text-sm rounded-md">{error}</div>}
-          
-          <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              이메일
-            </label>
-            <div className="relative">
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="example@email.com" 
-                required 
-                className={`w-full ${emailError ? 'border-red-500 pr-10' : ''}`}
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  setFormTouched(true)
-                }}
-              />
-              {isCheckingEmail && (
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <div className="h-4 w-4 border-t-2 border-blue-500 rounded-full animate-spin"></div>
-                </div>
-              )}
-              {emailError && !isCheckingEmail && (
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                </div>
-              )}
-            </div>
-            {emailError && (
-              <p className="text-xs text-red-500 mt-1">{emailError}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              비밀번호
-            </label>
-            <Input 
-              id="password" 
-              type="password" 
-              placeholder="8자 이상 입력해주세요" 
-              required 
-              className="w-full"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value)
-                setFormTouched(true)
-              }}
-            />
+    <div className="min-h-screen bg-gray-100">
+      <div className="container mx-auto px-4 py-8">
+        <Link href="/" className="inline-flex items-center text-gray-600 hover:text-gray-900">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          <span>홈으로 돌아가기</span>
+        </Link>
+        
+        <div className="max-w-md mx-auto mt-8 bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-center mb-6">회원가입</h1>
             
-            {/* 비밀번호 요구사항 체크리스트 */}
-            {formTouched && (
-              <div className="mt-2 space-y-1 text-xs">
-                <div className="flex items-center">
-                  {passwordValidation.length ? 
-                    <Check className="h-3 w-3 text-green-500 mr-1" /> : 
-                    <X className="h-3 w-3 text-red-500 mr-1" />}
-                  <span className={passwordValidation.length ? "text-green-600" : "text-gray-600"}>
-                    8자 이상
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  {passwordValidation.hasLetter ? 
-                    <Check className="h-3 w-3 text-green-500 mr-1" /> : 
-                    <X className="h-3 w-3 text-red-500 mr-1" />}
-                  <span className={passwordValidation.hasLetter ? "text-green-600" : "text-gray-600"}>
-                    영문자 포함
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  {passwordValidation.hasNumber ? 
-                    <Check className="h-3 w-3 text-green-500 mr-1" /> : 
-                    <X className="h-3 w-3 text-red-500 mr-1" />}
-                  <span className={passwordValidation.hasNumber ? "text-green-600" : "text-gray-600"}>
-                    숫자 포함
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  {passwordValidation.hasSpecial ? 
-                    <Check className="h-3 w-3 text-green-500 mr-1" /> : 
-                    <X className="h-3 w-3 text-red-500 mr-1" />}
-                  <span className={passwordValidation.hasSpecial ? "text-green-600" : "text-gray-600"}>
-                    특수문자 포함
-                  </span>
-                </div>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-start">
+                <AlertCircle className="h-5 w-5 text-red-500 mr-2 mt-0.5" />
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-              비밀번호 확인
-            </label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="비밀번호를 한번 더 입력해주세요"
-              required
-              className="w-full"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value)
-                setFormTouched(true)
-              }}
-            />
-            {formTouched && confirmPassword && (
-              <div className="flex items-center mt-1 text-xs">
-                {passwordValidation.matches ? 
-                  <Check className="h-3 w-3 text-green-500 mr-1" /> : 
-                  <X className="h-3 w-3 text-red-500 mr-1" />}
-                <span className={passwordValidation.matches ? "text-green-600" : "text-red-600"}>
-                  {passwordValidation.matches ? "비밀번호가 일치합니다" : "비밀번호가 일치하지 않습니다"}
-                </span>
+            
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                    이메일
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="example@example.com"
+                      className={`${emailError ? "border-red-500" : ""}`}
+                      required
+                    />
+                    {isCheckingEmail && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full"></div>
+                      </div>
+                    )}
+                  </div>
+                  {emailError && <p className="mt-1 text-sm text-red-600">{emailError}</p>}
+                </div>
+                
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                    이름
+                  </label>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="홍길동"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">이름을 입력하지 않으면 이메일 아이디가 사용됩니다.</p>
+                </div>
+                
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                    비밀번호
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                    비밀번호 확인
+                  </label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">비밀번호 요구사항:</p>
+                  <ul className="space-y-1">
+                    <li className="text-xs flex items-center">
+                      {passwordValidation.length ? (
+                        <Check className="h-3 w-3 text-green-500 mr-1" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-500 mr-1" />
+                      )}
+                      <span>8자 이상</span>
+                    </li>
+                    <li className="text-xs flex items-center">
+                      {passwordValidation.hasLetter ? (
+                        <Check className="h-3 w-3 text-green-500 mr-1" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-500 mr-1" />
+                      )}
+                      <span>영문자 포함</span>
+                    </li>
+                    <li className="text-xs flex items-center">
+                      {passwordValidation.hasNumber ? (
+                        <Check className="h-3 w-3 text-green-500 mr-1" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-500 mr-1" />
+                      )}
+                      <span>숫자 포함</span>
+                    </li>
+                    <li className="text-xs flex items-center">
+                      {passwordValidation.hasSpecial ? (
+                        <Check className="h-3 w-3 text-green-500 mr-1" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-500 mr-1" />
+                      )}
+                      <span>특수문자 포함</span>
+                    </li>
+                    <li className="text-xs flex items-center">
+                      {passwordValidation.matches ? (
+                        <Check className="h-3 w-3 text-green-500 mr-1" />
+                      ) : (
+                        <X className="h-3 w-3 text-red-500 mr-1" />
+                      )}
+                      <span>비밀번호 일치</span>
+                    </li>
+                  </ul>
+                </div>
+                
+                <div className="flex items-start">
+                  <Checkbox
+                    id="terms"
+                    checked={agreed}
+                    onCheckedChange={(checked) => setAgreed(checked as boolean)}
+                    className="mt-1"
+                  />
+                  <label htmlFor="terms" className="ml-2 text-sm text-gray-600">
+                    <span>
+                      <Link href="/terms" className="text-blue-600 hover:underline">
+                        이용약관
+                      </Link>
+                      과{" "}
+                      <Link href="/privacy" className="text-blue-600 hover:underline">
+                        개인정보 처리방침
+                      </Link>
+                      에 동의합니다.
+                    </span>
+                  </label>
+                </div>
+                
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading || (formTouched && !isFormValid)}
+                >
+                  {isLoading ? "처리 중..." : "회원가입"}
+                </Button>
               </div>
-            )}
+            </form>
+            
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600">
+                이미 계정이 있으신가요?{" "}
+                <Link href="/login" className="text-blue-600 hover:underline">
+                  로그인
+                </Link>
+              </p>
+            </div>
           </div>
-
-          <div className="flex items-center">
-            <Checkbox
-              id="agree"
-              checked={agreed}
-              onCheckedChange={(checked) => setAgreed(checked as boolean)}
-              className="border-gray-300"
-            />
-            <label htmlFor="agree" className="ml-2 text-sm text-gray-600">
-              <span className="font-medium text-gray-900">이용약관</span>과{" "}
-              <span className="font-medium text-gray-900">개인정보 처리방침</span>에 동의합니다.
-            </label>
-          </div>
-
-          <Button
-            type="submit"
-            className="w-full bg-black hover:bg-gray-800 text-white transition-colors"
-            disabled={!isFormValid || isLoading || isCheckingEmail}
-          >
-            {isLoading ? "처리 중..." : "회원가입"}
-          </Button>
-        </form>
-
-        {/* Terms */}
-        <div className="text-center text-sm text-gray-500">
-          회원가입 시{" "}
-          <Link href="#" className="text-blue-600 hover:underline">
-            이용약관
-          </Link>
-          과{" "}
-          <Link href="#" className="text-blue-600 hover:underline">
-            개인정보 처리방침
-          </Link>
-          에 동의하게 됩니다.
         </div>
       </div>
     </div>
