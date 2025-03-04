@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-
-// 임시 사용자 데이터베이스 (app/api/users/route.ts와 공유)
-// 실제 구현에서는 데이터베이스에서 사용자를 확인해야 합니다.
-import { users } from "../../users/data"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(request: Request) {
   try {
@@ -16,10 +13,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // 사용자 인증
-    const user = users.find((u) => u.email === email && u.password === password)
+    // 데이터베이스에서 사용자 조회
+    const user = await prisma.user.findUnique({
+      where: { email }
+    })
 
-    if (user) {
+    if (user && user.password === password) {
       // 실제 구현에서는 JWT 토큰을 생성하고 안전하게 저장해야 합니다.
       const token = `fake-jwt-token-${user.id}`
 

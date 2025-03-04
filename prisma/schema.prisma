@@ -3,16 +3,58 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   password  String
-  name      String?
+  username  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  tickets   Ticket[] @relation("SellerTickets")
+}
+
+model Concert {
+  id          Int      @id @default(autoincrement())
+  title       String
+  artist      String
+  date        String
+  time        String
+  venue       String
+  address     String
+  posterImage String?
+  description String?
+  category    String?
+  price       String   // SQLite에서는 JSON 대신 String으로 저장
+  seatMap     String?
+  status      String   // 'upcoming', 'ongoing', 'completed'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tickets     Ticket[]
+}
+
+model Ticket {
+  id                Int      @id @default(autoincrement())
+  concertId         Int
+  sellerId          Int
+  title             String
+  price             Int
+  originalPrice     Int
+  quantity          Int
+  grade             String   // 'VIP', 'R', 'S', 'A', 'B'
+  section           String?
+  row               String?
+  seatNumber        String?
+  isConsecutiveSeats Boolean
+  description       String?
+  status            String   // 'available', 'reserved', 'sold', 'cancelled'
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  concert           Concert  @relation(fields: [concertId], references: [id])
+  seller            User     @relation("SellerTickets", fields: [sellerId], references: [id])
 }
 
